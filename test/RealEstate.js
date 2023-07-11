@@ -67,6 +67,7 @@ describe("Real Estate", () => {
     deployer,
     seller,
     buyer,
+    lender,
     inspector;
   //THE ID OF FIRST NFT WILL BE 1
   let nftID = 1;
@@ -76,6 +77,7 @@ describe("Real Estate", () => {
     seller = deployer;
     buyer = accounts[1];
     inspector = accounts[2];
+    lender = accounts[3];
     const RealEstate =
       ethers.getContractFactory("RealEstate");
     realEstate = await (
@@ -90,7 +92,8 @@ describe("Real Estate", () => {
       buyer.address,
       priceInEther(100),
       priceInEther(20),
-      inspector.address
+      inspector.address,
+      lender.address
     );
     //WE ARE CONNECTING THE SELLER WHO OWNS THE NFT IN
     //REALESTATE CONTRACT AND APPROVES THE ESCROW CONTRACT
@@ -110,31 +113,61 @@ describe("Real Estate", () => {
   });
 
   describe("Transfer", () => {
-    it("Transfers an NFT", async () => {
+    it("Running the complete scenario", async () => {
       await escrow
-        .connect(buyer)
-        .finalizeTransaction();
-      const owner = await realEstate.ownerOf(
-        nftID
-      );
-      expect(owner).to.equal(buyer.address);
-    });
+        .connect(lender)
+        .payRemainingAmount({
+          value: priceInEther(80),
+        });
 
-    it("Sending the down payment", async () => {
+      console.log("Lender lends the money");
       await escrow
         .connect(buyer)
         .payEscrowAmount({
           value: priceInEther(20),
         });
-      const balance =
+      console.log("buyer adds the money");
+      await escrow
+        .connect(inspector)
+        .setInspection(true);
+      await escrow.connect(buyer).approveSale();
+      await escrow.connect(lender).approveSale();
+      await escrow.connect(seller).approveSale();
+
+      await escrow.finalizeTransaction();
+
+      const buyerBalance =
         await ethers.provider.getBalance(
-          escrow.address
+          buyer.address
         );
-      const balanceInEther =
-        ethers.utils.formatEther(balance);
-      expect(parseInt(balanceInEther)).to.equal(
-        20
-      );
+
+      const lenderBalance =
+        await ethers.provider.getBalance(
+          lender.address
+        );
+
+      const sellerBalance =
+        await ethers.provider.getBalance(
+          seller.address
+        );
+
+      expect(
+        parseInt(
+          ethers.utils.formatEther(buyerBalance)
+        )
+      ).to.below(9980);
+
+      expect(
+        parseInt(
+          ethers.utils.formatEther(lenderBalance)
+        )
+      ).to.below(9920);
+
+      expect(
+        parseFloat(
+          ethers.utils.formatEther(sellerBalance)
+        )
+      ).to.above(10099);
     });
   });
 });
